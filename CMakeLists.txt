@@ -5,6 +5,6 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -g -Wall")
 
 set_property(GLOBAL PROPERTY USE_FOLDERS On)
 include_directories( /usr/include/eigen3/)
-
- 
-SUBDIRS( ch3  )		
+#include_directories( ${PROJECT_SOURCE_DIR}/3rd/Sophus/)
+include_directories( ${PROJECT_SOURCE_DIR}/3rd/Sophus/)
+SUBDIRS( ch3  ch4)		
