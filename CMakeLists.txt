@@ -7,4 +7,7 @@ set_property(GLOBAL PROPERTY USE_FOLDERS On)
 include_directories( /usr/include/eigen3/)
 #include_directories( ${PROJECT_SOURCE_DIR}/3rd/Sophus/)
 include_directories( ${PROJECT_SOURCE_DIR}/3rd/Sophus/)
-SUBDIRS( ch3  ch4)		
+
+find_package(OpenCV REQUIRED)
+include_directories( ${OpenCV_INCLUDE_DIRS})
+SUBDIRS( ch3  ch4 ch5)		
