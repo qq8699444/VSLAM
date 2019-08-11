@@ -5,3 +5,5 @@ cmake ../Sophus/
 make -j4
 
 
+## ceres
+sudo apt-get install libceres-dev
