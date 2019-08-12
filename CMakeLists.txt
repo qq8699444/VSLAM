@@ -11,4 +11,4 @@ include_directories( ${PROJECT_SOURCE_DIR}/3rd/Sophus/)
 
 find_package(OpenCV REQUIRED)
 include_directories( ${OpenCV_INCLUDE_DIRS})
-SUBDIRS( ch3  ch4 ch5 ch6)		
+SUBDIRS( ch3  ch4 ch5 ch6 ch7)		
