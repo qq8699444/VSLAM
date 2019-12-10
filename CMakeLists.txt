@@ -8,6 +8,7 @@ include_directories( /usr/include/eigen3/)
 include_directories( /usr/local/include/)
 #include_directories( ${PROJECT_SOURCE_DIR}/3rd/Sophus/)
 include_directories( ${PROJECT_SOURCE_DIR}/3rd/Sophus/)
+include_directories( /usr/include/suitesparse/)
 
 find_package(OpenCV REQUIRED)
 include_directories( ${OpenCV_INCLUDE_DIRS})
