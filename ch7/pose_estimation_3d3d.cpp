@@ -12,6 +12,11 @@
 #include <g2o/core/optimization_algorithm_gauss_newton.h>
 #include <g2o/solvers/eigen/linear_solver_eigen.h>
 #include <g2o/types/sba/types_six_dof_expmap.h>
+
+#include <ceres/ceres.h>
+#include <ceres/rotation.h>
+
+
 #include <chrono>
 
 using namespace std;
@@ -237,6 +242,94 @@ void bundleAdjustment (
 
 }
 
+struct SimpleICPError
+{
+    SimpleICPError(const Point3f _pt1, const Point3f _pt2)
+    {
+        pt1[0] = _pt1.x;
+        pt1[1] = _pt1.y;
+        pt1[2] = _pt1.z;
+
+        pt2[0] = _pt2.x;
+        pt2[1] = _pt2.y;
+        pt2[2] = _pt2.z;
+    }
+
+    template<typename T>
+    bool operator()(const T* const camera,
+                    T* residuals) const
+    {
+        T p2[3] = {T(pt2[0]), T(pt2[1]), T(pt2[2])};
+
+        T p[3];        
+        ceres::AngleAxisRotatePoint(camera,p2,p);
+
+        p[0] += camera[3];
+        p[1] += camera[4];
+        p[2] += camera[5];       
+
+        residuals[0] = pt1[0] - p[0];
+        residuals[1] = pt1[1] - p[1];
+        residuals[2] = pt1[2] - p[2];
+        return true;
+    }
+
+    static ceres::CostFunction* create(const Point3f pt1,const Point3f pt2) {
+        return new ceres::AutoDiffCostFunction<SimpleICPError,3,6> (
+            new SimpleICPError(pt1, pt2)
+        );
+    }
+private:
+    double pt1[3];
+    double pt2[3];
+};
+
+void bundleAdjustmentWithCeres (
+    const vector< Point3f >& pts1,
+    const vector< Point3f >& pts2,
+    Mat& R, Mat& t )
+{
+    Mat r;
+    cv::Rodrigues (R, r); // 用Rodrigues公式转换为旋转向量形式
+    cout<<"r:" << r <<endl;
+
+    ceres::Problem problem;
+    typedef cv::Matx<double,1,6>    CameraPose;
+
+    CameraPose  cameraPose(
+        r.at<double>(0,0),r.at<double>(1,0),r.at<double>(2,0),
+        t.at<double>(0,0),t.at<double>(1,0),t.at<double>(2,0)
+    );
+    
+    for (size_t i = 0; i < pts1.size(); i++)
+    {
+        ceres::CostFunction* cost_func = SimpleICPError::create(pts1[i],pts2[i]);
+
+        problem.AddResidualBlock(cost_func,
+                        nullptr,
+                        cameraPose.val);
+    }
+
+    ceres::Solver::Options options;     // 这里有很多配置项可以填
+    options.linear_solver_type = ceres::DENSE_QR;  // 增量方程如何求解
+    options.minimizer_progress_to_stdout = true;   // 输出到cout
+
+    ceres::Solver::Summary summary;                // 优化信息
+    chrono::steady_clock::time_point t1 = chrono::steady_clock::now();
+    ceres::Solve ( options, &problem, &summary );  // 开始优化
+    chrono::steady_clock::time_point t2 = chrono::steady_clock::now();
+    chrono::duration<double> time_used = chrono::duration_cast<chrono::duration<double>>( t2-t1 );
+    cout<<"ceres optimization time cost = "<<time_used.count()<<" seconds. "<<endl;
+
+    // 输出结果
+    cout<<summary.BriefReport() <<endl;
+
+
+    Matx33d Rx;
+    ceres::AngleAxisToRotationMatrix( cameraPose.val, Rx.val ); // r为旋转向量形式，用Rodrigues公式转换为矩阵
+    cout<<"R="<<endl<<Rx.t()<<endl;
+}
+
 int main ( int argc, char** argv )
 {
     if ( argc != 5 )
@@ -282,21 +375,25 @@ int main ( int argc, char** argv )
     cout<<"R_inv = "<<R.t() <<endl;
     cout<<"t_inv = "<<-R.t() *t<<endl;
 
-#if 1
+
     cout<<"calling bundle adjustment"<<endl;
-
+#if 0
     bundleAdjustment( pts1, pts2, R, t );
-
+#else
+    bundleAdjustmentWithCeres( pts1, pts2, R, t );
+#endif
     // verify p1 = R*p2 + t
     for ( int i=0; i<5; i++ )
     {
+        /*
         cout<<"p1 = "<<pts1[i]<<endl;
         cout<<"p2 = "<<pts2[i]<<endl;
         cout<<"(R*p2+t) = "<<
             R * (Mat_<double>(3,1)<<pts2[i].x, pts2[i].y, pts2[i].z) + t
             <<endl;
         cout<<endl;
+        */
     }
-#endif
+
     return 0;
 }

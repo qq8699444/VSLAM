@@ -22,6 +22,35 @@ struct CURVE_FITTING_COST
 };
 
 
+class CURVE_FITTING_COST2:public ceres::SizedCostFunction<1,3>
+{
+public:
+    CURVE_FITTING_COST2(double x_,double y_):x(x_),y(y_) {}
+    virtual ~CURVE_FITTING_COST2() {}
+
+    virtual bool Evaluate(double const* const* parameters,
+                        double* residuals,
+                        double** jacobians) const {
+    const double a = parameters[0][0];
+    const double b = parameters[0][1];
+    const double c = parameters[0][2];
+    auto result = ceres::exp ( a*x*x + b*x+ c);
+    residuals[0] = y - result;
+
+    // Compute the Jacobian if asked for.
+    if (jacobians != NULL && jacobians[0] != NULL) {
+      jacobians[0][0] = -result * x *x;
+      jacobians[0][1] = -result * x;
+      jacobians[0][2] = -result;
+    }
+    return true;
+  }
+
+private:
+  const double x,y;
+};
+
+
 int main ( int argc, char** argv )
 {   
     double a=1.0, b=2.0, c=1.0;         // 真实参数值
@@ -47,6 +76,13 @@ int main ( int argc, char** argv )
 
     for (size_t i = 0; i < N; i++)
     {
+#if 1
+    problem.AddResidualBlock(
+            new CURVE_FITTING_COST2(x_data[i],y_data[i]) ,
+            nullptr,
+            abc
+        );
+#else
         /* code */
         problem.AddResidualBlock(
             new ceres::AutoDiffCostFunction<CURVE_FITTING_COST,1,3>(
@@ -55,6 +91,7 @@ int main ( int argc, char** argv )
             nullptr,
             abc
         );
+    #endif
     }
     
     ceres::Solver::Options options;     // 这里有很多配置项可以填

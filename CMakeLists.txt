@@ -1,7 +1,7 @@
 cmake_minimum_required( VERSION 2.6 )
 project( VSLAM_code )
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -g -Wall")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -O3 -Wall")
 
 set_property(GLOBAL PROPERTY USE_FOLDERS On)
 include_directories( /usr/include/eigen3/)
@@ -12,4 +12,4 @@ include_directories( /usr/include/suitesparse/)
 
 find_package(OpenCV REQUIRED)
 include_directories( ${OpenCV_INCLUDE_DIRS})
-SUBDIRS( ch3  ch4 ch5 ch6 ch7 ch8)		
+SUBDIRS( ch3  ch4 ch5 ch6 ch7 ch8 ch10)		

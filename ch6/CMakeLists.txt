@@ -7,3 +7,8 @@ target_link_libraries(g2o_curve_fitting ceres glog ${OpenCV_LIBS} g2o_core g2o_s
 
 set_target_properties(ceres_curve_fitting PROPERTIES FOLDER "chapter6") 
 set_target_properties(g2o_curve_fitting PROPERTIES FOLDER "chapter6") 
+
+
+add_executable(sgd_curve_fitting sgd_curve_fitting.cpp)
+target_link_libraries(sgd_curve_fitting ${OpenCV_LIBS})     
+set_target_properties(sgd_curve_fitting PROPERTIES FOLDER "chapter6") 

@@ -11,6 +11,10 @@
 #include <g2o/core/optimization_algorithm_levenberg.h>
 #include <g2o/solvers/csparse/linear_solver_csparse.h>
 #include <g2o/types/sba/types_six_dof_expmap.h>
+
+#include <ceres/ceres.h>
+#include <ceres/rotation.h>
+
 #include <chrono>
 
 
@@ -145,12 +149,105 @@ void bundleAdjustment (
     optimizer.optimize ( 100 );
     chrono::steady_clock::time_point t2 = chrono::steady_clock::now();
     chrono::duration<double> time_used = chrono::duration_cast<chrono::duration<double>> ( t2-t1 );
-    cout<<"optimization costs time: "<<time_used.count() <<" seconds."<<endl;
+    cout<<"g2o optimization costs time: "<<time_used.count() <<" seconds."<<endl;
 
     cout<<endl<<"after optimization:"<<endl;
     cout<<"T="<<endl<<Eigen::Isometry3d ( pose->estimate() ).matrix() <<endl;
 }
 
+struct SimpleProjectError
+{
+    SimpleProjectError(double observed_x_,double observed_y_):
+        observed_x(observed_x_),observed_y(observed_y_)
+        {
+
+        }
+
+    template<typename T>
+    bool operator()(const T* const camera,
+                    const T* const point,
+                    T* residuals) const
+    {
+        T p[3];
+
+        ceres::AngleAxisRotatePoint(camera,point,p);
+
+        p[0] += camera[3];
+        p[1] += camera[4];
+        p[2] += camera[5];
+
+        const T xp = p[0]/p[2];
+        const T yp = p[1]/p[2];
+
+        residuals[0] = xp - observed_x;
+        residuals[1] = yp - observed_y;
+
+        return true;
+    }
+
+    static ceres::CostFunction* create(const double observed_x,const double observed_y) {
+        return new ceres::AutoDiffCostFunction<SimpleProjectError,2,6,3> (
+            new SimpleProjectError(observed_x,observed_y)
+        );
+    }
+private:
+    double observed_x;
+    double observed_y;
+};
+
+void bundleAdjustment2 (
+    const vector< Point3f > points_3d,
+    const vector< Point2f > points_2d,
+    const Mat& K,
+    Mat& r, Mat& t )
+{
+    ceres::Problem problem;
+
+    typedef cv::Matx<double,1,6>    CameraPose;
+
+    //double angleAxis[3];
+    //ceres::RotationMatrixToAngleAxis<double>(R.t(),angleAxis);
+
+    CameraPose  cameraPose(
+        r.at<double>(0,0),r.at<double>(1,0),r.at<double>(2,0),
+        t.at<double>(0,0),t.at<double>(1,0),t.at<double>(2,0)
+    );
+
+    vector<cv::Vec3d> points3d(points_3d.size());
+    for (size_t i = 0; i < points_2d.size(); i++)
+    {
+        points3d[i] = Point3d(points_3d[i].x,points_3d[i].y,points_3d[i].z);
+
+        Point2f pt2f = points_2d[i];
+        pt2f = pixel2cam(pt2f,K);
+        
+        ceres::CostFunction* cost_func = SimpleProjectError::create(pt2f.x,pt2f.y);
+
+        problem.AddResidualBlock(cost_func,
+                        nullptr,
+                        cameraPose.val,
+                        points3d[i].val);
+    }
+    
+    ceres::Solver::Options options;     // 这里有很多配置项可以填
+    options.linear_solver_type = ceres::DENSE_SCHUR;  // 增量方程如何求解
+    options.minimizer_progress_to_stdout = true;   // 输出到cout
+
+    ceres::Solver::Summary summary;                // 优化信息
+    chrono::steady_clock::time_point t1 = chrono::steady_clock::now();
+    ceres::Solve ( options, &problem, &summary );  // 开始优化
+    chrono::steady_clock::time_point t2 = chrono::steady_clock::now();
+    chrono::duration<double> time_used = chrono::duration_cast<chrono::duration<double>>( t2-t1 );
+    cout<<"ceres optimization time cost = "<<time_used.count()<<" seconds. "<<endl;
+
+    // 输出结果
+    cout<<summary.BriefReport() <<endl;
+
+
+    Matx33d R;
+    ceres::AngleAxisToRotationMatrix( cameraPose.val, R.val ); // r为旋转向量形式，用Rodrigues公式转换为矩阵
+    cout<<"R="<<endl<<R.t()<<endl;
+}
 int main ( int argc, char** argv )
 {
     if ( argc != 5 )
@@ -188,17 +285,27 @@ int main ( int argc, char** argv )
     cout<<"3d-2d pairs: "<<pts_3d.size() <<endl;
 
     Mat r, t;
-    solvePnP ( pts_3d, pts_2d, K, Mat(), r, t, false ); // 调用OpenCV 的 PnP 求解，可选择EPNP，DLS等方法
     Mat R;
-    cv::Rodrigues ( r, R ); // r为旋转向量形式，用Rodrigues公式转换为矩阵
+    {
+        chrono::steady_clock::time_point t1 = chrono::steady_clock::now();
+    
+        
+        solvePnP ( pts_3d, pts_2d, K, Mat(), r, t, false ); // 调用OpenCV 的 PnP 求解，可选择EPNP，DLS等方法
+        
+        cv::Rodrigues ( r, R ); // r为旋转向量形式，用Rodrigues公式转换为矩阵
 
-    cout<<"R="<<endl<<R<<endl;
-    cout<<"t="<<endl<<t<<endl;
+        chrono::steady_clock::time_point t2 = chrono::steady_clock::now();
+        chrono::duration<double> time_used = chrono::duration_cast<chrono::duration<double>> ( t2-t1 );
+        cout<<"solvePnP costs time: "<<time_used.count() <<" seconds."<<endl;
+
+        cout<<"R="<<endl<<R<<endl;
+        cout<<"t="<<endl<<t<<endl;
+    }
 
     cout<<"calling bundle adjustment"<<endl;
 
     bundleAdjustment ( pts_3d, pts_2d, K, R, t );
-
+    bundleAdjustment2 ( pts_3d, pts_2d, K, r, t );
 
     return 0;
 }
